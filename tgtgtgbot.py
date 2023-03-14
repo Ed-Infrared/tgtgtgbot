@@ -1,11 +1,14 @@
 import logging
 import time
-from telegram import Update  # https://github.com/python-telegram-bot/python-telegram-bot
-from telegram.ext import filters, MessageHandler, ApplicationBuilder, ContextTypes, CommandHandler
 import json
 import sqlite3
+
+from telegram import Update  # https://github.com/python-telegram-bot/python-telegram-bot
+from telegram.ext import filters, MessageHandler, ApplicationBuilder, ContextTypes, CommandHandler
+from tgtg import TgtgClient  # https://github.com/ahivert/tgtg-python
+
 from sqlite3 import Error
-from tgtg import TgtgClient, TgtgAPIError  # https://github.com/ahivert/tgtg-python
+from tgtg import TgtgAPIError
 from requests.exceptions import ConnectionError
 
 logging.basicConfig(
@@ -42,7 +45,7 @@ async def command_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # set pause flag in database for this user
     con = db_connection()
     cursor = con.cursor()
-    cursor.execute("""UPDATE users SET pause=? WHERE userid_tg=?""", (1, update.effective_chat.id))
+    cursor.execute(f"""UPDATE users SET pause=1 WHERE userid_tg={update.effective_chat.id}""")
     con.commit()
     con.close()
     await context.bot.send_message(chat_id=update.effective_chat.id,
@@ -54,8 +57,8 @@ async def command_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # reset pause flag in database for this user
     con = db_connection()
     cursor = con.cursor()
-    cursor.execute("""UPDATE users SET pause=? WHERE userid_tg=?""", (0, update.effective_chat.id))
-    cursor.execute("""UPDATE users SET sent_deals=? WHERE userid_tg=?""", ('[]', update.effective_chat.id))
+    cursor.execute(f"""UPDATE users SET pause=0 WHERE userid_tg={update.effective_chat.id}""")
+    cursor.execute(f"""UPDATE users SET sent_deals='[]' WHERE userid_tg={update.effective_chat.id}""")
     con.commit()
     con.close()
     await context.bot.send_message(chat_id=update.effective_chat.id,
@@ -64,7 +67,10 @@ async def command_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def command_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # show status for this user
+    # show info for this user
+    con = db_connection()
+    cursor = con.cursor()
+    cursor.execute(f"""SELECT * FROM users WHERE userid_tg={update.effective_chat.id}""")
     await context.bot.send_message(chat_id=update.effective_chat.id,
                                    text="info")
 
@@ -84,21 +90,33 @@ def db_connection():
     conn = None
     try:
         conn = sqlite3.connect("tgtgtgbot.sqlite")
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users
+            ([userid_tg] INTEGER,
+             [tgtg_accesstoken] TEXT,
+             [tgtg_refreshtoken] TEXT,
+             [tgtg_userid] TEXT,
+             [tgtg_cookie] TEXT,
+             [pause] INTEGER,
+             [last_seen] INTEGER,
+             [sent_deals] TEXT)
+        """)
     except Error as e:
-        print(e)
+        logging.error(e)
     return conn
 
 
 def retrieve_active_user_list(conn):
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE pause=0")
+    cursor.execute("""SELECT * FROM users WHERE pause=0""")
     return cursor.fetchall()
 
 
 def update_user(conn, telegram_user_id, message_sent_lst):
     cursor = conn.cursor()
     msl_json = json.dumps(message_sent_lst)
-    cursor.execute("UPDATE users SET sent_deals = ? where userid_tg = ?", (msl_json, telegram_user_id))
+    cursor.execute(f"""UPDATE users SET sent_deals={msl_json} where userid_tg={telegram_user_id}""")
     conn.commit()
 
 
