@@ -32,7 +32,6 @@ async def command_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_first_name = update.effective_chat.first_name
     user_is_bot = update.effective_user.is_bot
     if user_is_bot:
-        # TODO: block bot-user
         await context.bot.send_message(chat_id=update.effective_chat.id,
                                        text="Sorry, no bots allowed")
     else:
@@ -71,14 +70,22 @@ async def command_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     con = db_connection()
     cursor = con.cursor()
     cursor.execute(f"""SELECT * FROM users WHERE userid_tg={update.effective_chat.id}""")
+    user = cursor.fetchall()[0]
+    con.close()
     await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text="info")
+                                   text=f"info: {user[0]}")
 
 
 async def command_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # remove this user from the database
+    con = db_connection()
+    cursor = con.cursor()
+    cursor.execute(f"""DELETE FROM users WHERE userid_tg={update.effective_chat.id}""")
+    con.commit()
+    con.close()
     await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text="delete")
+                                   text="Your data is deleted.\n"
+                                        "To subscribe again type /start")
 
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -102,6 +109,7 @@ def db_connection():
              [last_seen] INTEGER,
              [sent_deals] TEXT)
         """)
+        conn.commit()
     except Error as e:
         logging.error(e)
     return conn
@@ -113,10 +121,10 @@ def retrieve_active_user_list(conn):
     return cursor.fetchall()
 
 
-def update_user(conn, telegram_user_id, message_sent_lst):
+def update_sent_deals(conn, telegram_user_id, message_sent_lst):
     cursor = conn.cursor()
     msl_json = json.dumps(message_sent_lst)
-    cursor.execute(f"""UPDATE users SET sent_deals={msl_json} where userid_tg={telegram_user_id}""")
+    cursor.execute(f"""UPDATE users SET sent_deals='{msl_json}' where userid_tg={telegram_user_id}""")
     conn.commit()
 
 
@@ -155,7 +163,7 @@ async def job_tgtg(context: ContextTypes.DEFAULT_TYPE):
                 update_user_flag = True
 
         if update_user_flag:
-            update_user(dbconn, user[0], sent_deals)
+            update_sent_deals(dbconn, user[0], sent_deals)
 
     dbconn.close()
 
@@ -170,7 +178,7 @@ if __name__ == '__main__':
     start_handler = CommandHandler('start', command_start)
     pause_handler = CommandHandler('pause', command_pause)
     resume_handler = CommandHandler('resume', command_resume)
-    status_handler = CommandHandler('status', command_info)
+    status_handler = CommandHandler('info', command_info)
     delete_handler = CommandHandler('delete', command_delete)
 
     echo_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), echo)
