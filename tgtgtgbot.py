@@ -8,8 +8,9 @@ from telegram.ext import filters, MessageHandler, ApplicationBuilder, ContextTyp
 from tgtg import TgtgClient  # https://github.com/ahivert/tgtg-python
 
 from sqlite3 import Error
-from tgtg import TgtgAPIError
+from tgtg import TgtgAPIError, TgtgPollingError, TgtgLoginError
 from requests.exceptions import ConnectionError
+from email_validator import validate_email, EmailNotValidError  # https://github.com/JoshData/python-email-validator
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -20,12 +21,13 @@ logging.basicConfig(
 
 async def command_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text="/help   - this help\n"
-                                        "/start  - start conversation (TODO)\n"
-                                        "/pause  - pause subscription\n"
-                                        "/resume - resume subscription\n"
-                                        "/info   - show subscription info (TODO)\n"
-                                        "/delete - delete my subscription(TODO)\n")
+                                   text='/help   - this help\n'
+                                        '/start  - start conversation\n'
+                                        '/email  - register too good to go email'
+                                        '/pause  - pause subscription\n'
+                                        '/resume - resume subscription\n'
+                                        '/info   - show subscription info (TODO)\n'
+                                        '/delete - delete my subscription\n')
 
 
 async def command_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -33,11 +35,30 @@ async def command_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_is_bot = update.effective_user.is_bot
     if user_is_bot:
         await context.bot.send_message(chat_id=update.effective_chat.id,
-                                       text="Sorry, no bots allowed")
+                                       text='Sorry, no bots allowed')
     else:
         # check status of this user and initiate registering
-        await context.bot.send_message(chat_id=update.effective_chat.id,
-                                       text=f"I'm a bot, please talk to me {user_first_name}!")
+        userid_tg = update.effective_chat.id
+        con = db_connection()
+        cursor = con.cursor()
+        cursor.execute(f"""SELECT * FROM users WHERE userid_tg={userid_tg}""")
+        result = cursor.fetchall()
+        if len(result)==0:
+            # create row in dbase
+            cursor.execute(f"""INSERT INTO users (userid_tg, pause, sent_deals) VALUES ({userid_tg}, 0, '[]');""")
+            con.commit()
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f'Welcome {user_first_name},\n'
+                     f'To access your Too Good To Go account please send us your email associated with Too Good To Go '
+                     f'with the command: /email <your email>'
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f'Welcome back {user_first_name}'
+            )
+        con.close()
 
 
 async def command_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -84,19 +105,57 @@ async def command_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     con.commit()
     con.close()
     await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text="Your data is deleted.\n"
-                                        "To subscribe again type /start")
+                                   text='Your data is deleted.\n'
+                                        'To subscribe again type /start')
+
+
+async def command_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # register user with tgtg api
+    user_tgtg_email = "".join(context.args)
+    # validate email
+    try:
+        v = validate_email(user_tgtg_email)
+        user_tgtg_email = v["email"]
+        await context.bot.send_message(chat_id=update.effective_chat.id,
+                                       text='An email is sent to you.\n'
+                                            'To confirm your registration please click on the link provided.\n'
+                                            'IMPORTANT! Do not click on the link on the same device that has '
+                                            'the Too Good To Go app')
+        try:
+            client = TgtgClient(email=user_tgtg_email)
+            credentials = client.get_credentials()
+            # credentials = {'access_token': 'e30.eyJzdWIiOiIxMDAxMzU3MjUiLCJleHAiOjE2NzkzMzE3NzYsInQiOiJWLWR3b1pvS1RBdUZwQldCejQxVTZnOjA6MSJ9.zguizg5eIbF0EFEKoMclrHhPq0ZZMw37LkbsUh9p34E', 'refresh_token': 'e30.eyJzdWIiOiIxMDAxMzU3MjUiLCJleHAiOjE3MTA3ODEzNzYsInQiOiJCQzBwR0pyWlFVS2tiWThXbzhHOE5BOjA6MCJ9.5bPuI-K81NEhc4x9V9QIKzDx6B8v7_j9thkJONfLh10', 'user_id': '100135725', 'cookie': 'datadome=5Z1Yeh28XpiIhnv_zOCv1jD23bULjBuAdL-CGp_5xgWH-YH4mJj7vOqDTqI8RttQcVFj7z1GddbBcn9JqPTZyeK2UMAd6Z320oOmbzXsxakgtaTD~CKlImns3~8qRS6P; Max-Age=5184000; Domain=.apptoogoodtogo.com; Path=/; Secure; SameSite=Lax'}
+            # store credentials
+            con = db_connection()
+            cursor = con.cursor()
+            cursor.execute(f"""UPDATE users SET 
+                               tgtg_accesstoken="{credentials['access_token']}",
+                               tgtg_refreshtoken="{credentials['refresh_token']}",
+                               tgtg_userid="{credentials['user_id']}",
+                               tgtg_cookie="{credentials['cookie']}"
+                               WHERE userid_tg={update.effective_chat.id};""")
+            con.commit()
+            con.close()
+            await context.bot.send_message(chat_id=update.effective_chat.id,
+                                           text='Your Too Good To Go access is registered with me\n'
+                                                'When your favorite deals are available I wll sent you a message.')
+        except TgtgPollingError as e:
+            logging.info(str(e))
+    except EmailNotValidError as e:
+        logging.info(f'{e}: {user_tgtg_email}')
+        await context.bot.send_message(chat_id=update.effective_chat.id,
+                                       text=str(e) + '\nPlease try again')
 
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text="Type /help for an overview of all commands")
+                                   text='Type /help for an overview of all commands')
 
 
 def db_connection():
     conn = None
     try:
-        conn = sqlite3.connect("tgtgtgbot.sqlite")
+        conn = sqlite3.connect('tgtgtgbot.sqlite')
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users
@@ -117,21 +176,21 @@ def db_connection():
 
 def retrieve_active_user_list(conn):
     cursor = conn.cursor()
-    cursor.execute("""SELECT * FROM users WHERE pause=0""")
+    cursor.execute("""SELECT * FROM users WHERE pause=0 AND tgtg_cookie IS NOT NULL;""")
     return cursor.fetchall()
 
 
 def update_sent_deals(conn, telegram_user_id, message_sent_lst):
     cursor = conn.cursor()
     msl_json = json.dumps(message_sent_lst)
-    cursor.execute(f"""UPDATE users SET sent_deals='{msl_json}' where userid_tg={telegram_user_id}""")
+    cursor.execute(f"""UPDATE users SET sent_deals='{msl_json}' where userid_tg={telegram_user_id};""")
     conn.commit()
 
 
 async def job_tgtg(context: ContextTypes.DEFAULT_TYPE):
     dbconn = db_connection()
     active_user_list = retrieve_active_user_list(dbconn)
-    logging.info(f"processing {len(active_user_list)} toogoodtogo user(s)")
+    logging.info(f'processing {len(active_user_list)} toogoodtogo user(s)')
 
     for user in active_user_list:
         update_user_flag = False
@@ -143,23 +202,23 @@ async def job_tgtg(context: ContextTypes.DEFAULT_TYPE):
                                  cookie=user[4],)
         try:
             items = tgtg_client.get_items()
-        except (TgtgAPIError, ConnectionError) as e:
+        except (TgtgAPIError, ConnectionError, TgtgLoginError, TgtgPollingError) as e:
             logging.error(e)
             time.sleep(10)
             continue
 
         for item in items:
-            if item["items_available"] and item["in_sales_window"]:
-                if item["item"]["item_id"] not in sent_deals:
-                    message = f"{item['store']['store_name']} " \
-                              f"{item['store']['store_location']['address']['address_line']} " \
-                              f"{item['item']['name']} " \
-                              f"{item['items_available']}"
+            if item['items_available'] and item['in_sales_window']:
+                if item['item']['item_id'] not in sent_deals:
+                    message = f'{item["store"]["store_name"]} ' \
+                              f'{item["store"]["store_location"]["address"]["address_line"]} ' \
+                              f'{item["item"]["name"]} ' \
+                              f'{item["items_available"]}'
                     await context.bot.send_message(chat_id=user[0], text=message)
-                    sent_deals.append(item["item"]["item_id"])
+                    sent_deals.append(item['item']['item_id'])
                     update_user_flag = True
-            elif item["item"]["item_id"] in sent_deals:
-                sent_deals.remove(item["item"]["item_id"])
+            elif item['item']['item_id'] in sent_deals:
+                sent_deals.remove(item['item']['item_id'])
                 update_user_flag = True
 
         if update_user_flag:
@@ -180,6 +239,7 @@ if __name__ == '__main__':
     resume_handler = CommandHandler('resume', command_resume)
     status_handler = CommandHandler('info', command_info)
     delete_handler = CommandHandler('delete', command_delete)
+    email_handler = CommandHandler('email', command_email)
 
     echo_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), echo)
 
@@ -189,7 +249,7 @@ if __name__ == '__main__':
     application.add_handler(resume_handler)
     application.add_handler(status_handler)
     application.add_handler(delete_handler)
-
+    application.add_handler(email_handler)
     application.add_handler(echo_handler)
 
     job_tgtg = job_queue.run_repeating(job_tgtg, interval=300, first=10)
