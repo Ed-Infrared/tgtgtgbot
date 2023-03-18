@@ -1,4 +1,6 @@
+#!/usr/bin/python3 
 import logging
+import logging.handlers
 import time
 import json
 import sqlite3
@@ -12,18 +14,22 @@ from tgtg import TgtgAPIError, TgtgPollingError, TgtgLoginError
 from requests.exceptions import ConnectionError
 from email_validator import validate_email, EmailNotValidError  # https://github.com/JoshData/python-email-validator
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO,
-    filename='tgtgtgbot.log'
+log_handler = logging.handlers.TimedRotatingFileHandler('tgtgtgbot.log', when='midnight')
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+formatter.converter = time.localtime
+log_handler.setFormatter(formatter)
+logger = logging.getLogger()
+logger.addHandler(log_handler)
+logger.setLevel(logging.INFO)
 
 
 async def command_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id,
                                    text='/help   - this help\n'
                                         '/start  - start conversation\n'
-                                        '/email  - register too good to go email'
+                                        '/email  - register too good to go email\n'
                                         '/pause  - pause subscription\n'
                                         '/resume - resume subscription\n'
                                         '/info   - show subscription info (TODO)\n'
@@ -43,7 +49,7 @@ async def command_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor = con.cursor()
         cursor.execute(f"""SELECT * FROM users WHERE userid_tg={userid_tg}""")
         result = cursor.fetchall()
-        if len(result)==0:
+        if len(result) == 0:
             # create row in dbase
             cursor.execute(f"""INSERT INTO users (userid_tg, pause, sent_deals) VALUES ({userid_tg}, 0, '[]');""")
             con.commit()
@@ -124,7 +130,6 @@ async def command_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             client = TgtgClient(email=user_tgtg_email)
             credentials = client.get_credentials()
-            # credentials = {'access_token': 'e30.eyJzdWIiOiIxMDAxMzU3MjUiLCJleHAiOjE2NzkzMzE3NzYsInQiOiJWLWR3b1pvS1RBdUZwQldCejQxVTZnOjA6MSJ9.zguizg5eIbF0EFEKoMclrHhPq0ZZMw37LkbsUh9p34E', 'refresh_token': 'e30.eyJzdWIiOiIxMDAxMzU3MjUiLCJleHAiOjE3MTA3ODEzNzYsInQiOiJCQzBwR0pyWlFVS2tiWThXbzhHOE5BOjA6MCJ9.5bPuI-K81NEhc4x9V9QIKzDx6B8v7_j9thkJONfLh10', 'user_id': '100135725', 'cookie': 'datadome=5Z1Yeh28XpiIhnv_zOCv1jD23bULjBuAdL-CGp_5xgWH-YH4mJj7vOqDTqI8RttQcVFj7z1GddbBcn9JqPTZyeK2UMAd6Z320oOmbzXsxakgtaTD~CKlImns3~8qRS6P; Max-Age=5184000; Domain=.apptoogoodtogo.com; Path=/; Secure; SameSite=Lax'}
             # store credentials
             con = db_connection()
             cursor = con.cursor()
