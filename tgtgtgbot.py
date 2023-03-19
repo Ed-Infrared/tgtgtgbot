@@ -217,7 +217,8 @@ async def job_tgtg(context: ContextTypes.DEFAULT_TYPE):
                     message = f'{item["store"]["store_name"]} ' \
                               f'{item["store"]["store_location"]["address"]["address_line"]} ' \
                               f'{item["item"]["name"]} ' \
-                              f'{item["items_available"]}'
+                              f'{item["items_available"]}\n' \
+                              f'https://share.toogoodtogo.com/item/{item["item"]["item_id"]}/'
                     await context.bot.send_message(chat_id=user[0], text=message)
                     sent_deals.append(item['item']['item_id'])
                     update_user_flag = True
