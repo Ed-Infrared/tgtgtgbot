@@ -1,0 +1,12 @@
+# too good to go api
+# https://github.com/ahivert/tgtg-python
+tgtg~=0.17.0
+
+# telegram bot api
+# https://github.com/python-telegram-bot/python-telegram-bot
+python-telegram-bot~=21.4
+
+# https://github.com/JoshData/python-email-validator
+email_validator~=2.2.0
+
+requests~=2.32.3
