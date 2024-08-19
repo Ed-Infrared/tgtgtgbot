@@ -1,3 +1,5 @@
+# https://stackoverflow.com/questions/3287038/cron-and-virtualenv
+
 import logging
 import logging.handlers
 import time
