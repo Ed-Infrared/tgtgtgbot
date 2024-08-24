@@ -1,5 +1,5 @@
 [Unit]
-Description=TooGoodToGoTeleGramBot service
+Description=TooGoodToGoTeleGramBot
 After=multi-user.target
 
 [Service]
