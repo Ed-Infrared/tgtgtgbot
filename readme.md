@@ -20,5 +20,3 @@ To autostart the script with systemd:
 - start the service and check if it is running
     - sudo systemctl start tgtgtgbot
     - sudo systemctl status tgtgtgbot
-
-TODO: using webhooks for Telegram instead of polling every 10 seconds

@@ -1,1 +1,4 @@
-{"telegram_bot_token": "<YOUR TOKEN HERE>"}
+{"telegram_bot_token": "<YOUR TOKEN HERE>",
+ "telegram_secret_token": "<YOUR SELF GENERATED SECRET HERE>",
+ "telegram_webhook_url": "<YOUR WEBHOOK URL>",
+ "telegram_webhook_port": <YOUR WEBHOOK PORT>}
