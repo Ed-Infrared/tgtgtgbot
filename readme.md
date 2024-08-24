@@ -13,7 +13,8 @@ It provides them with an telegram alert when one of their too good to go favorit
 - to stop press ctrl-c and enter deactivate to leave the python virtual enviroment
 
 To autostart the script with systemd:
-- copy tgtgtgbot.service to your appropiate folder e.g. /etc/systemd/system
+- edit tgtgtgbot.service.example with the right values
+- copy tgtgtgbot.service.example to your appropiate folder e.g. /etc/systemd/system/tgtgtgbot.service
 - enable the service to start at boot
     - sudo systemctl enable tgtgtgbot
 - start the service and check if it is running
