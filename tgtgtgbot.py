@@ -258,11 +258,12 @@ if __name__ == '__main__':
     application.add_handler(echo_handler)
 
     job_tgtg = job_queue.run_repeating(job_tgtg, interval=300, first=10)
-#    application.run_polling()
-
+    application.run_polling()
+'''
     application.run_webhook(
         listen='0.0.0.0',
         port=eval(telegram_bot_token["telegram_webhook_port"]),
         secret_token=telegram_bot_token["telegram_secret_token"],
         webhook_url=telegram_bot_token["telegram_webhook_url"] + ':' + telegram_bot_token["telegram_webhook_port"]
         )
+'''
