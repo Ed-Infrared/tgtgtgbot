@@ -262,7 +262,7 @@ if __name__ == '__main__':
 
     application.run_webhook(
         listen='0.0.0.0',
-        port=telegram_bot_token["telegram_webhook_port"],
+        port={telegram_bot_token["telegram_webhook_port"]},
         secret_token=telegram_bot_token["telegram_secret_token"],
         webhook_url='{telegram_bot_token["telegram_webhook_url"]}:{telegram_bot_token["telegram_webhook_port"]}'
         )
