@@ -1,0 +1,12 @@
+[Unit]
+Description=TooGoodToGoTeleGramBot service
+After=multi-user.target
+
+[Service]
+Type=idle
+User=Your Linux user name
+WorkingDirectory=Your_tgtgtgbot_folder
+ExecStart=Your_tgtgtgbot_folder/venv/bin/python3 tgtgtgbot.py
+
+[Install]
+WantedBy=multi-user.target
